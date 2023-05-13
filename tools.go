@@ -11,16 +11,17 @@ import (
 	"strings"
 )
 
-const randomStringSource = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-+"
+const randomStringSource = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_+"
 
-// Tools is the type used to instantiate this module
-// Any variable of this type will have access to all methods with the receiver *Tools
+// Tools is the type used to instantiate this module. Any variable of this type will have access
+// to all the methods with the reciever *Tools
 type Tools struct {
 	MaxFileSize      int
 	AllowedFileTypes []string
 }
 
-// RandomString returns a string of random characters of length n using randomStringSource as a source for string
+// RandomString returns a string of random characters of length n, using randomStringSource
+// as the source for the string
 func (t *Tools) RandomString(n int) string {
 	s, r := make([]rune, n), []rune(randomStringSource)
 	for i := range s {
@@ -32,13 +33,33 @@ func (t *Tools) RandomString(n int) string {
 	return string(s)
 }
 
-// UploadedFile is a struct used tosave information about an uploaded file
+// UploadedFile is a struct used to save information about an uploaded file
 type UploadedFile struct {
-	NewFileName         string
-	NewOriginalFileName string
-	FileSize            int64
+	NewFileName      string
+	OriginalFileName string
+	FileSize         int64
 }
 
+// UploadOneFile is just a convenience method that calls UploadFiles, but expects only one file to
+// be in the upload.
+func (t *Tools) UploadOneFile(r *http.Request, uploadDir string, rename ...bool) (*UploadedFile, error) {
+	renameFile := true
+	if len(rename) > 0 {
+		renameFile = rename[0]
+	}
+
+	files, err := t.UploadFiles(r, uploadDir, renameFile)
+	if err != nil {
+		return nil, err
+	}
+
+	return files[0], nil
+}
+
+// UploadFiles uploads one or more file to a specified directory, and gives the files a random name.
+// It returns a slice containing the newly named files, the original file names, the size of the files,
+// and potentially an error. If the optional last parameter is set to true, then we will not rename
+// the files, but will use the original file names.
 func (t *Tools) UploadFiles(r *http.Request, uploadDir string, rename ...bool) ([]*UploadedFile, error) {
 	renameFile := true
 	if len(rename) > 0 {
@@ -53,7 +74,7 @@ func (t *Tools) UploadFiles(r *http.Request, uploadDir string, rename ...bool) (
 
 	err := r.ParseMultipartForm(int64(t.MaxFileSize))
 	if err != nil {
-		return nil, errors.New("the uplaoded file is too big")
+		return nil, errors.New("the uploaded file is too big")
 	}
 
 	for _, fHeaders := range r.MultipartForm.File {
@@ -64,7 +85,6 @@ func (t *Tools) UploadFiles(r *http.Request, uploadDir string, rename ...bool) (
 				if err != nil {
 					return nil, err
 				}
-
 				defer infile.Close()
 
 				buff := make([]byte, 512)
@@ -73,7 +93,7 @@ func (t *Tools) UploadFiles(r *http.Request, uploadDir string, rename ...bool) (
 					return nil, err
 				}
 
-				// TODO: check to see if the file type is permitted
+				// check to see if the file type is permitted
 				allowed := false
 				fileType := http.DetectContentType(buff)
 
@@ -102,6 +122,8 @@ func (t *Tools) UploadFiles(r *http.Request, uploadDir string, rename ...bool) (
 					uploadedFile.NewFileName = hdr.Filename
 				}
 
+				uploadedFile.OriginalFileName = hdr.Filename
+
 				var outfile *os.File
 				defer outfile.Close()
 
@@ -119,12 +141,10 @@ func (t *Tools) UploadFiles(r *http.Request, uploadDir string, rename ...bool) (
 
 				return uploadedFiles, nil
 			}(uploadedFiles)
-
 			if err != nil {
 				return uploadedFiles, err
 			}
 		}
 	}
-
 	return uploadedFiles, nil
 }
